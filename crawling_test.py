@@ -1,62 +1,45 @@
+
+from bs4 import BeautifulSoup
 import pandas as pd
 import requests
-import time
-from tqdm import trange
-from bs4 import BeautifulSoup as bs
-
-headers = {"user-agent": "Mozilla/5.0"}
-
-def get_url(item_code, page_no=1):
-    url = f"https://finance.naver.com/item/board.nhn"
-    url = f"{url}?code={item_code}&page={page_no}"
-    return url  
-
-def get_one_page(item_code, page_no):  
-    "한 페이지 수집"
-    # 종목 URL 만들기
-    url = get_url(item_code, page_no)
-    # requests
-    response = requests.get(url, headers=headers)
-    # 데이터프레임 만들기
-    table = pd.read_html(response.text)[1]
-    
-    return table
-
-def get_last_page(item_code):
-    url = get_url(item_code)
-    response = requests.get(url, headers=headers)
-    html = bs(response.text)
-    last_page = int(html.select("#content > div.section.inner_sub > table > tbody > tr > td > table > tbody > tr > td.pgRR > a")[-1]['href'].split('=')[-1])
-    return last_page
-
-num = get_last_page("377740")
-#print(num)
-
-def get_all_pages(item_code):
-    "모든 페이지 수집"
-    last = get_last_page(item_code)
-    page_list = []
- 
-    # 1페이지 ~ 끝페이지
-    for page_num in trange(1, last+1):
-        page = get_one_page(item_code, page_num)
-        page_list.append(page)
-        time.sleep(0.1)
-    
-    # 모든 페이지 하나의 데이터프레임으로 합치기
-    df_all_page = pd.concat(page_list)
-    # 결측치 제거
-    df_all_page = df_all_page.dropna(how="all").iloc[:, :-1]
-    # 조회, 공감, 비공감 정수형 변환
-    df_all_page.loc[:, '조회':'비공감'] = df_all_page.loc[:, '조회':'비공감'].astype('int')
-    # 인덱스 리셋
-    df_all_page = df_all_page.reset_index(drop=True)
- 
-    return df_all_page
 
 
-item_code='377740' #바이오 노트
-df_all=get_all_pages(item_code)
-df_all
+def NS_users_crawler(codes, page):
+    # User-Agent 설정
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.67 Safari/537.36'}
+    result_df = pd.DataFrame([])
 
-df_all.to_excel('bionote.xlsx', index=False)
+    n_ = 0
+    for page in range(1, page):
+        n_ += 1
+        if (n_ % 10 == 0):
+            print('================== Page ' + str(page) + ' is done ==================')
+        url = "https://finance.naver.com/item/board.naver?code=%s&page=%s" % (codes, str(page))
+        # html → parsing
+        html = requests.get(url, headers=headers).content
+        # 한글 깨짐 방지 decode
+        soup = BeautifulSoup(html.decode('euc-kr', 'replace'), 'html.parser')
+        table = soup.find('table', {'class': 'type2'})
+        tb = table.select('tbody > tr')
+
+        for i in range(2, len(tb)):
+            if len(tb[i].select('td > span')) > 0:
+                date = tb[i].select('td > span')[0].text
+                title = tb[i].select('td.title > a')[0]['title']
+                views = tb[i].select('td > span')[1].text
+                pos = tb[i].select('td > strong')[0].text
+                neg = tb[i].select('td > strong')[1].text
+                table = pd.DataFrame({'날짜': [date], '제목': [title], '조회': [views], '공감': [pos], '비공감': [neg]})
+                #result_df = result_df.append(table)
+                result_df = pd.concat([result_df, table], ignore_index=True)
+
+
+    return result_df
+
+data = NS_users_crawler("066970", 3)
+print(data.head(10))
+
+excel_file = 'landf_crawling.xlsx'
+data.to_excel(excel_file, index=False)
+
+print(f"Data saved to {excel_file}")
