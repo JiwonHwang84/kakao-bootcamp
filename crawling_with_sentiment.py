@@ -1,7 +1,7 @@
 import pandas as pd
 from transformers import pipeline
 
-# ChatGPT 모델을 활용한 감성 분석 함수 정의
+# Hugging Face의 Transformers 라이브러리에서 제공하는 감성 분석 모델 정의
 def predict_sentiment(text):
     classifier = pipeline("sentiment-analysis")
     result = classifier(text)
